@@ -11,29 +11,36 @@ if(empty($submission_id))
 	exit();
 }
 
-$sqlstring	= "SELECT ntd_id, submission_id, submission_type, designation, region, org_name, station_name, longitude, br_reg_date FROM itu_filings, itu_members WHERE itu_members.symbol = itu_filings.org_name AND submission_id = '$submission_id'";
+$submission_id	= (int)$submission_id;
+//LEFT JOIN: an administration missing from itu_members used to return no row and render a blank card
+$sqlstring	= "SELECT ntd_id, submission_id, submission_type, COALESCE(designation, org_name) AS designation, region, org_name, station_name, longitude, br_reg_date FROM itu_filings LEFT JOIN itu_members ON itu_members.symbol = itu_filings.org_name WHERE submission_id = $submission_id";
 echo $sqlstring."\n";
 $result		= mysqli_query($conn, $sqlstring);
-while ($row	= mysqli_fetch_assoc($result))
+$row		= $result ? mysqli_fetch_assoc($result) : null;
+if(!$row)
 {
-	$org_name			= $row['org_name'];
-	$station_name			= $row['station_name'];
-	$longitude			= $row['longitude'];
-	$br_reg_date			= $row['br_reg_date'];
-	$ntd_id				= $row['ntd_id'];
-	$submission_id			= $row['submission_id'];
-	$submission_type		= $row['submission_type'];
-	$designation			= $row['designation'];
-	$region				= $row['region'];
+	echo "No itu_filings row for submission $submission_id\n";
+	exit(1);
 }
+$org_name			= $row['org_name'];
+$station_name			= $row['station_name'];
+$longitude			= $row['longitude'];
+$br_reg_date			= $row['br_reg_date'];
+$ntd_id				= $row['ntd_id'];
+$submission_type		= $row['submission_type'];
+$designation			= $row['designation'];
+$region				= $row['region'];
 
-//Convert longitude
+//Convert longitude ("137.2 E" => 137.2, "26.5 W" => -26.5). Keeps decimals, which the old \d* dropped.
 echo "Longitude: $longitude\n";
-preg_match('/(\d*)/', $longitude, $output_array);
-$long	= $output_array[0];
-if(str_contains($longitude, 'W'))
+$long	= '';
+if(preg_match('/(\d+(?:\.\d+)?)/', $longitude, $output_array))
 {
-	$long = $long * -1;
+	$long	= (float)$output_array[1];
+	if(str_contains($longitude, 'W'))
+	{
+		$long = $long * -1;
+	}
 }
 
 //Begin image rendering
@@ -44,7 +51,7 @@ $save_file_loc 		= "/home/chairboy/fccspacewatch/license_renders/$submission_id-
 
 echo "Template: $template_path\n";
 
-if (!empty($long))
+if ($long !== '')
 {
 	$uestation	= urlencode($station_name);
 	$marker	= "&markers=anchor:top|icon:https://deltayeet.net/itu_sat_icon.png|color:blue%7Clabel:$uestation%7C0,$long&";
@@ -58,22 +65,29 @@ if (!empty($long))
 }
 
 //Render a map using Google API
-$map_string	= "https://maps.googleapis.com/maps/api/staticmap?center=0,$long&zoom=1&size=600x300&maptype=satellite$marker&key=" . bot_cfg('google', 'maps_api_key') . "";
+$map_string	= "https://maps.googleapis.com/maps/api/staticmap?center=0,".($long === '' ? 0 : $long)."&zoom=1&size=600x300&maptype=satellite$marker&key=" . bot_cfg('google', 'maps_api_key') . "";
 echo "Map: $map_string\n";
 //IP limited to our server
-$image 		= file_get_contents($map_string);
-file_put_contents($save_file_loc, $image);
+$image 		= @file_get_contents($map_string);
+if($image !== false && $image !== '')
+{
+	file_put_contents($save_file_loc, $image);
+} else
+{
+	echo "Map download failed; rendering without the map.\n";
+}
 //exec		("convert $save_file_loc /home/chairboy/tfrmonitor/maps/$png_name 2> /dev/null");
 
 
 //Define our workspace, 640/566 to match the template
 $im			= imagecreatetruecolor(640,566);
-$google_map_image	= imagecreatefrompng($save_file_loc);
+$google_map_image	= (is_readable($save_file_loc) && $image) ? @imagecreatefromstring(file_get_contents($save_file_loc)) : false;
 $template_image		= imagecreatefrompng($template_path);
 
 if(!$template_image)
 {
 	echo "Error loading template image\n";
+	exit(1);
 }
 
 var_dump($template_image);
@@ -111,7 +125,10 @@ echo "File path for map: $save_file_loc\n";
 
 
 //Overlay transparent working area on template
-imagecopy	($im, $google_map_image, 21,237,0,0, 600, 298);
+if($google_map_image)
+{
+	imagecopy	($im, $google_map_image, 21,237,0,0, 600, 298);
+}
 imagecopy	($template_image, $im, 0,0,0,0,$image_width, $image_height);
 imagepng	($template_image, $png_save_path."$submission_id.png");
 

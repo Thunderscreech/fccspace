@@ -91,10 +91,14 @@ CREATE TABLE `itu_filings` (
   `submission_id` int(11) NOT NULL,
   `submission_type` varchar(128) DEFAULT NULL,
   `org_name` varchar(24) DEFAULT NULL,
-  `station_name` varchar(64) NOT NULL,
-  `longitude` varchar(16) NOT NULL,
+  `station_name` varchar(128) NOT NULL,
+  `longitude` varchar(32) NOT NULL,
   `br_reg_date` date NOT NULL,
-  PRIMARY KEY (`itu_item`)
+  `post_text` text DEFAULT NULL,
+  `posted` tinyint(1) NOT NULL DEFAULT 1,
+  `post_attempts` int(11) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`itu_item`),
+  UNIQUE KEY `uniq_submission` (`submission_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `itu_members`;
