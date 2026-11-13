@@ -117,10 +117,13 @@ DROP TABLE IF EXISTS `nasa_procurement`;
 /*!40101 SET character_set_client = utf8mb4 */;
 CREATE TABLE `nasa_procurement` (
   `procurement_id` int(11) NOT NULL AUTO_INCREMENT,
-  `procurement_title` varchar(128) DEFAULT NULL,
-  `procurement_url` varchar(128) DEFAULT NULL,
+  `procurement_title` varchar(255) DEFAULT NULL,
+  `procurement_url` varchar(255) DEFAULT NULL,
   `added_date` timestamp NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`procurement_id`)
+  `wp_id` int(11) DEFAULT NULL,
+  `published_date` datetime DEFAULT NULL,
+  PRIMARY KEY (`procurement_id`),
+  UNIQUE KEY `uniq_wp_id` (`wp_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `status`;
