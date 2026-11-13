@@ -1,0 +1,7 @@
+*/5 * * * * php /home/chairboy/fccspacewatch/fccspacewatch.php > /home/chairboy/fccspacewatch/fccspacewatch.log 2>&1
+#*/20 * * * * php /home/chairboy/fccspacewatch/ibfmonitor.php > /home/chairboy/fccspacewatch/ibfmonitor.log 2>&1
+#*/30 * * * *  php /home/chairboy/fccspacewatch/ELSmonitor.php > /home/chairboy/fccspacewatch/EFSmonitor.log 2>&1
+#*/1 * * * * php /home/chairboy/fccspacewatch/faalaunchlicensewatch.php > /home/chairboy/fccspacewatch/faalicensewatch.log 2>&1
+#*/1 * * * * sleep 30;php /home/chairboy/fccspacewatch/faalaunchlicensewatch.php >> /home/chairboy/fccspacewatch/faalicensewatch.log 2>&1
+20 * * * * php /home/chairboy/fccspacewatch/itumonitor.php > /home/chairboy/fccspacewatch/itumonitor.log  2>&1
+30 * * * * php /home/chairboy/fccspacewatch/nasa_procurement_monitor.php

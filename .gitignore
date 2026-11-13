@@ -1,0 +1,22 @@
+# --- Credentials (copy the *.example files and fill them in) ---
+config.ini
+bluesky.conf
+tootophp/tootophp.json
+
+# --- Runtime output and state ---
+*.log
+*.lock
+output.txt
+out.png
+license_renders/
+backups/
+
+# --- Backups made while editing ---
+*.bak*
+
+# --- Fonts are commercial/third-party; install them locally (see README) ---
+fonts/
+
+# --- Dependencies (run `php composer.phar install`) ---
+vendor/
+composer.phar

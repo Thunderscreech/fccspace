@@ -1,0 +1,290 @@
+<?php
+//Read https://fcc.report/IBFS/ for Satellite Space Station entries
+error_reporting(E_ERROR | E_PARSE);
+include 'common.inc';
+use DG\Twitter\Twitter;
+require_once 'vendor/dg/twitter-php/src/twitter.class.php';
+
+//Check if I'm supposed to be running
+$sqlstring	= "SELECT status_data FROM status WHERE status_item = 'active'";
+$active		= mysqli_query($conn,$sqlstring)->fetch_object()->status_data;
+if($active == '1')
+{
+	//No action required, we are on like kong
+} else
+{
+	echo "According to status.status_item.active, I am supposed to be asleep.  Exiting...\n";
+	exit();
+}
+
+
+$url	= "https://fcc.report/IBFS/";
+
+$ch	= curl_init($url);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (compatible; FCCSpaceWatch)');
+$html	= curl_exec($ch);
+
+if ($html === false || empty(trim($html))) {
+    error_log("cURL error fetching $url: " . curl_error($ch));
+    curl_close($ch);
+    exit;
+}
+
+curl_close($ch);
+
+$dom	= new domDocument;
+libxml_use_internal_errors(true);
+$dom->loadHTML($html);
+libxml_clear_errors();
+
+$dom	= new domDocument;
+libxml_use_internal_errors(true);
+$dom->loadHTML($html);
+libxml_clear_errors();
+
+$dom->loadHTML($html);
+
+//Update last run
+$sqlstring	= "update status set status_data = now() where status_item = 'ibfs_lastrun'";
+$result		= mysqli_query($conn,$sqlstring);// or die "Error running query: $sqlstring".mysqli_error($conn);
+
+
+echo "Checking IBFS licenses...\n";
+
+$table = $dom->getElementsByTagName('table')->item(0);
+
+foreach($table->getElementsByTagName('tr') as $tr)
+{
+	$tds		= $tr->getElementsByTagName('td');
+
+	$element0	= trim($tds->item(0)->nodeValue);
+	$workingarray	= explode("\n", $element0);
+	$last_update	= $workingarray[0];
+	$file_number	= $workingarray[1];
+	$workingarray	= explode("\n", $tds->item(2)->nodeValue);
+	$call_sign	= $workingarray[0];
+	$filing_type	= $workingarray[1];
+	//echo "$last_update: $file_number - $filing_type\n";
+	if(strpos($filing_type, "Space Statio"))
+	{
+		if(is_report_onfile($conn,$file_number))
+		{
+			//It's in the database, no action required
+			//echo "$file_number already in system, skipping.\n";
+		} else
+		{
+
+			$url		= "https://fcc.report/".$tds->item(0)->getElementsByTagName('a')->item(0)->getAttribute('href');
+			$html		= file_get_contents($url);
+			$company	= get_company_name($html);
+			$description	= trim(get_description($html));
+			$lendelta	= strlen($company)-18;
+
+			$description	= substr($description,0,170-$lendelta);
+			if(strlen($description) >= 170)
+			{
+				$description = $description."(...)";
+			}
+			$tweet		= "Company:$company Filed:$last_update\n$description\n$url";
+			//echo "(".strlen($tweet)."): $tweet\n\n";
+
+			$tweet		= addslashes($tweet);
+
+			$sqlstring	= "INSERT INTO ibfs (file_number, last_update, company_name) VALUES ('$file_number',str_to_date('$last_update','%Y-%m-%d'),'$company')";
+			$result		= mysqli_query($conn, $sqlstring);
+
+			//Get the ID so we can use it for the render
+			$sqlstring	= "SELECT ibfs_id FROM ibfs ORDER BY ibfs_id DESC LIMIT 1";
+			$ibfs_id	= mysqli_query($conn,$sqlstring)->fetch_object()->ibfs_id;
+
+			//$render_string	= "/home/chairboy/fccspacewatch/render_ibfs_license.sh \"$url\" $ibfs_id";
+			//echo "Render: $render_string\n";
+			//exec($render_string);
+			
+			echo "Tweeting: $tweet\n";
+			//tweet($tweet);
+			//$return_val	= newer_tweet($conn, $tweet, array("ibf-$ibfs_id.png"), '');
+			//$return_val	= twute($conn, $tweet, array(''), '');
+			$mastodon_post	= mastodon_post($tweet, "/home/chairboy/fccspacewatch/license_renders/ibf-$ibfs_id.png");
+			sleep(5);
+					
+		}
+		
+	}
+	
+	
+
+}
+echo "Done.";
+
+//Do we have this report
+function is_report_onfile($conn,$file_number)
+{
+	$sqlstring	= "SELECT count(*) as report_count FROM ibfs WHERE file_number = '$file_number'";
+	if(mysqli_query($conn,$sqlstring)->fetch_object()->report_count >= 1)
+	{
+		//This is already in the system and no action is requires
+		$return	= true;
+	} else
+	{
+		$return = false;
+	}
+
+	return $return;
+}
+
+//Get the company
+function get_company_name($html)
+{
+	//Find h2 and read for title
+	$dom	= new domDocument;
+	libxml_use_internal_errors(true);
+	$dom->loadHTML($html);	
+	$dom->preserveWhiteSpace = false;
+	foreach($dom->getElementsByTagName('h2') as $header)
+	{
+		$company_name	= $header->nodeValue;
+		//echo $company_name."\n";
+	}
+
+$application_titles	= array(
+'Application for Earth Exploration Satellite Service Mobile Satellite Service Other by ',
+'Application for Fixed Satellite Service by ',
+'Application for Direct to Home Fixed Satellite Fixed Satellite Service by ',
+'Satellite Space Stations ',
+'Application for Fixed Satellite Service Other by ',
+'Application for Earth Exploration Satellite Service Other by',
+'Application for Earth Exploration Satellite Service by');
+
+	foreach($application_titles as $filter)
+	{
+		$company_name = str_replace($filter,"",$company_name);
+	}
+
+
+	if(isset($company_name))
+	{
+		return $company_name;
+	} else
+	{
+		return false;
+	}
+}
+
+function get_description($html)
+{
+	//Find the right DIV and <p> inside of it for the description
+	$dom	= new domDocument;
+	libxml_use_internal_errors(true);
+	$dom->loadHTML($html);	
+	$dom->preserveWhiteSpace = false;
+	$div	= $dom->getElementsByTagName('div');
+
+	foreach($div as $tag)
+	{
+		if($tag->getAttribute('class') === 'jumbotron')
+		{
+			$description	= explode("[GOV]",$tag->nodeValue,2)[1];
+			$description	= explode("Filing:",$description,2)[0];
+			$description	= explode("See attach",$description,2)[0];
+			$description	= explode("See exhibi",$description,2)[0];
+			$description	= explode("See Attach",$description,2)[0];
+			$description	= explode("See Exhibi",$description,2)[0];
+			$description	= explode("Please see attached",$description,2)[0];
+			$description	= explode("See narrative",$description,2)[0];
+
+			//echo $description."\n";
+		}
+
+	}
+
+	if(isset($description))
+	{
+		return $description;
+	} else
+	{
+		return false;
+	}
+}
+
+
+
+//Loop through table, get links to files with a type of 
+function get_current_report_url($url)
+{	
+	$dom	= new domDocument;
+	$html	= file_get_contents($url);
+	libxml_use_internal_errors(true);
+	$dom->loadHTML($html);
+	$dom->preserveWhiteSpace = false; 
+	foreach($dom->getElementsByTagName('a') as $anchor)
+	{
+		$link	= $anchor->getAttribute('href');
+		if (strpos($link,"mode=current"))
+		{
+			//this is our link to the real report
+			$return_url	= "https://apps.fcc.gov$link";
+		} 
+	}
+
+	if(isset($return_url))
+	{
+		return $return_url;
+	} else
+	{
+		return false;
+	}
+}	
+
+
+function get_applicant_name($html)
+{	
+	//for processing the actual report
+	$dom = new domDocument; 
+	$dom->loadHTML($html); 
+	$dom->preserveWhiteSpace = false; 
+	$tables = $dom->getElementsByTagName('table'); 
+	$rows = $tables->item(1)->getElementsByTagName('tr'); 
+	foreach ($rows as $row) 
+	{
+		$cols = $row->getElementsByTagName('td'); 
+		//echo "0:".$cols->item(0)->nodeValue."\n";
+		//echo "1:".$cols->item(1)->nodeValue."\n";
+		$applicant_name		= $cols->item(1)->nodeValue;
+		//echo "2:".$cols->item(2)->nodeValue."\n";
+		//echo "3:".$cols->item(3)->nodeValue."\n";
+		//echo "4:".$cols->item(4)->nodeValue."\n";
+		//echo "5:".$cols->item(5)->nodeValue."\n";
+		//echo "6:".$cols->item(6)->nodeValue."\n";
+		//echo "7:".$cols->item(7)->nodeValue."\n";
+		//echo "8:".$cols->item(8)->nodeValue."\n";
+		//echo "9:".$cols->item(9)->nodeValue."\n";
+	}
+	return $applicant_name;
+}
+
+function tweet($tweet_text)
+{
+	//Post a tweet as FCCSpace
+	//Oauth keys
+
+	$consumerKey = bot_cfg('twitter', 'consumer_key');
+	$consumerSecret =bot_cfg('twitter', 'consumer_secret');
+	$accessToken = bot_cfg('twitter', 'access_token');
+	$accessTokenSecret = bot_cfg('twitter', 'access_token_secret');
+
+	$twitter = new Twitter($consumerKey, $consumerSecret, $accessToken, $accessTokenSecret);
+	echo "Tweeting: $tweet_text\n";
+	try {
+		$twitter->send("$tweet_text");
+	} catch (DG\Twitter\TwitterException $e) 
+	{
+		echo 'Error: ' . $e->getMessage();
+	}
+}
+
+
+?>

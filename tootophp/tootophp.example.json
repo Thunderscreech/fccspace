@@ -1,0 +1,10 @@
+{
+    "id": "REPLACE_WITH_APP_ID",
+    "name": "REPLACE_WITH_APP_NAME",
+    "website": "REPLACE_WITH_APP_WEBSITE",
+    "redirect_uri": "urn:ietf:wg:oauth:2.0:oob",
+    "client_id": "REPLACE_WITH_MASTODON_CLIENT_ID",
+    "client_secret": "REPLACE_WITH_MASTODON_CLIENT_SECRET",
+    "vapid_key": "",
+    "bearer": "REPLACE_WITH_MASTODON_BEARER_TOKEN"
+}
