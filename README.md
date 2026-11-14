@@ -36,3 +36,27 @@ switched off in cron. `cron/crontab.txt` is a snapshot of the live schedule.
 
 `config.ini`, `bluesky.conf`, `tootophp/tootophp.json`, logs, renders and backups are git-ignored;
 never commit real credentials.
+
+## Error log and daily triage
+
+Routine problems (a source failing several runs in a row, a post given up on, a notice that couldn't be saved)
+are recorded in `logs/errors.md` instead of being sent to Discord. Repeats are grouped into one entry with a
+count, and an entry is flagged *recovered* once the problem clears. Only critical, time-sensitive problems still
+go to Discord, at most once every 3 hours each: the database being unreachable, or Mastodon/Bluesky (or the
+SAM.gov API, for nasaprocurement) rejecting the bot's credentials. Intentional notices are unchanged.
+
+`logs/errors.json` holds the data and `errors.md` is regenerated from it:
+
+```
+php errors.php                          # list open entries
+php errors.php show <id>
+php errors.php resolve <id> "what was wrong and what was done"
+php errors.php reopen <id>
+```
+
+`cron/error_triage.sh` runs daily from cron. When nothing is open it exits without starting Claude. Otherwise it
+runs Claude Code headless with `cron/error_triage_prompt.md`. Claude is limited to this folder and may not read
+credentials, run the posting scripts or push. It commits fixes locally, writes `logs/triage/YYYY-MM-DD.md`, and
+sends one Discord note only when something needs you. It uses the login token in `/root/.claude/triage_token`
+(see the script's header). `errorlog.inc`, `errors.php` and `cron/error_triage.sh` are shared with the other bots
+(spacecareers, fccspacewatch, nasaprocurement); keep the copies in sync.

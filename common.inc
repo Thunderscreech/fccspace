@@ -20,15 +20,38 @@ function bot_cfg($section, $key)
 	return (string)($cfg[$section][$key] ?? '');
 }
 
+// Error reporting: routine problems go to logs/errors.md for the daily triage job, only critical ones to Discord
+include_once __DIR__ . '/errorlog.inc';
+
 //DB connect - do it every time
 $dbhost = bot_cfg('database', 'host');
 $dbuser = bot_cfg('database', 'user');
 $dbpass = bot_cfg('database', 'password');
 
-$conn = mysqli_connect($dbhost, $dbuser, $dbpass) or die ('Error connecting to mysql');
+// PHP 8 throws on a failed connect instead of returning false: handle both
+try {
+	$conn	= @mysqli_connect($dbhost, $dbuser, $dbpass);
+	$__dberr= $conn ? '' : mysqli_connect_error() . ' (error ' . mysqli_connect_errno() . ')';
+} catch (mysqli_sql_exception $e) {
+	$conn	= false;
+	$__dberr= $e->getMessage() . ' (error ' . $e->getCode() . ')';
+}
+if (!$conn) {
+	sc_alert_critical("Cannot connect to MySQL: $__dberr", array('key' => 'db-connect', 'detail' => 'First seen in ' . sc_err_script()));
+	die("Error connecting to mysql\n");
+}
 
 $dbname = bot_cfg('database', 'name');
-mysqli_select_db($conn, $dbname) or die("Error selecting DB");
+try {
+	$__ok	= mysqli_select_db($conn, $dbname);
+} catch (mysqli_sql_exception $e) {
+	$__ok	= false;
+}
+if (!$__ok) {
+	sc_alert_critical("Cannot select database $dbname: " . mysqli_error($conn), array('key' => 'db-select'));
+	die("Error selecting DB\n");
+}
+unset($__dberr, $__ok);
 
 
 
@@ -111,6 +134,10 @@ function mastodon_post($post_text, $img = null)
     if ($return_var !== 0) {
         echo "Command failed with status $return_var. Output:\n";
         print_r($output);
+        // toot.sh prints "... failed with status 401": a rejected token breaks every post, so page for it
+        if (preg_match('/failed with status (401|403)\b/', implode("\n", $output), $m)) {
+            sc_alert_critical("Mastodon rejected the bot's access token (HTTP {$m[1]})", array('key' => 'post-auth-mastodon'));
+        }
         return false;  // Indicate failure
     }
 
@@ -148,6 +175,10 @@ function bluesky_post($post_text, $img = null)
 	if(empty($session['accessJwt']))
 	{
 		echo "Bluesky: login failed: ".json_encode($session)."\n";
+		if(in_array($session['error'] ?? '', array('AuthenticationRequired', 'AccountTakedown', 'HTTP 401', 'HTTP 403'), true))
+		{
+			sc_alert_critical("Bluesky login refused for {$conf['handle']}: ".($session['error'] ?? '').' '.($session['message'] ?? ''), array('key' => 'post-auth-bluesky'));
+		}
 		return false;
 	}
 	$jwt	= $session['accessJwt'];

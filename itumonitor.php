@@ -240,7 +240,7 @@ function post_itu_filing($conn, $submission_id, $max_attempts, $png_dir)
 	}
 	if($attempts >= $max_attempts)
 	{
-		dy_discord("ITU monitor: giving up posting submission $submission_id after $attempts attempts");
+		sc_log_error("ITU monitor: giving up posting submission $submission_id after $attempts attempts");
 	}
 	return false;
 }
@@ -259,12 +259,13 @@ function retry_itu_posts($conn, $max_posts, $max_attempts, $detail_url, $png_dir
 	return $count;
 }
 
-//Count consecutive failed runs (hourly); alert at 3 and then once a day.
+//Count consecutive failed runs (hourly); log to errors.md at 3 and then once a day.
 function track_itu_health($conn, $ok, $error)
 {
 	if($ok)
 	{
 		mysqli_query($conn, "UPDATE status SET status_data = '0' WHERE status_item = 'itu_failures'");
+		sc_error_cleared('itu-failures');
 		return;
 	}
 	mysqli_query($conn, "UPDATE status SET status_data = CAST(status_data AS UNSIGNED) + 1 WHERE status_item = 'itu_failures'");
@@ -273,6 +274,6 @@ function track_itu_health($conn, $ok, $error)
 	$fails	= $row ? (int)$row->status_data : 0;
 	if($fails == 3 || ($fails > 3 && ($fails - 3) % 24 == 0))
 	{
-		dy_discord("ITU monitor has failed $fails runs in a row. Last error: $error");
+		sc_log_error("ITU monitor has failed $fails runs in a row. Last error: $error", array('key' => 'itu-failures'));
 	}
 }
