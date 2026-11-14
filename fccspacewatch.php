@@ -332,7 +332,7 @@ function post_application($conn, $application_id, $max_attempts, $png_dir)
 	$all_done	= ($mastodon_done && $bluesky_done);
 	if(!$all_done && $attempts >= $max_attempts)
 	{
-		dy_discord("FCCSpace: giving up posting application $application_id after $attempts attempts (mastodon_done=$mastodon_done, bluesky_done=$bluesky_done)");
+		sc_log_error("FCCSpace: giving up posting application $application_id after $attempts attempts (mastodon_done=$mastodon_done, bluesky_done=$bluesky_done)");
 	}
 	return $all_done;
 }
@@ -374,17 +374,18 @@ function record_skip($conn, $title, $reason, $permanent, $max_attempts)
 		$row	= $res ? $res->fetch_object() : null;
 		if($row && $row->attempts == $max_attempts)
 		{
-			dy_discord("FCCSpace: giving up on ".trim($title)." after $max_attempts failed attempts. Last error: $reason");
+			sc_log_error("FCCSpace: giving up on ".trim($title)." after $max_attempts failed attempts. Last error: $reason");
 		}
 	}
 }
 
-//Count consecutive feed failures in the status table; alert after 6 (30 min) and every 72 (6 hours) after that.
+//Count consecutive feed failures in the status table; log to errors.md after 6 (30 min) and every 72 (6 hours) after that.
 function track_feed_health($conn, $ok, $http_code)
 {
 	if($ok)
 	{
 		mysqli_query($conn, "UPDATE status SET status_data = '0' WHERE status_item = 'feed_failures'");
+		sc_error_cleared('fcc-feed');
 		return;
 	}
 	mysqli_query($conn, "UPDATE status SET status_data = CAST(status_data AS UNSIGNED) + 1 WHERE status_item = 'feed_failures'");
@@ -393,7 +394,7 @@ function track_feed_health($conn, $ok, $http_code)
 	$fails	= $row ? (int)$row->status_data : 0;
 	if($fails == 6 || ($fails > 6 && ($fails - 6) % 72 == 0))
 	{
-		dy_discord("FCCSpace: the FCC grants feed has failed $fails runs in a row (last HTTP $http_code). Nothing is being posted.");
+		sc_log_error("FCCSpace: the FCC grants feed has failed $fails runs in a row (last HTTP $http_code). Nothing is being posted.", array('key' => 'fcc-feed'));
 	}
 }
 

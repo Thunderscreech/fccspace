@@ -150,12 +150,13 @@ function procurement_title($topic)
 	return ucwords(str_replace('-', ' ', (string)($topic['slug'] ?? 'Untitled procurement')));
 }
 
-//Count consecutive failed runs (hourly); alert at 3 and then once a day.
+//Count consecutive failed runs (hourly); log to errors.md at 3 and then once a day.
 function track_nasa_health($conn, $ok, $error)
 {
 	if($ok)
 	{
 		mysqli_query($conn, "UPDATE status SET status_data = '0' WHERE status_item = 'nasa_failures'");
+		sc_error_cleared('nasa-failures');
 		return;
 	}
 	mysqli_query($conn, "UPDATE status SET status_data = CAST(status_data AS UNSIGNED) + 1 WHERE status_item = 'nasa_failures'");
@@ -164,6 +165,6 @@ function track_nasa_health($conn, $ok, $error)
 	$fails	= $row ? (int)$row->status_data : 0;
 	if($fails == 3 || ($fails > 3 && ($fails - 3) % 24 == 0))
 	{
-		pushbullet("NASA procurement monitor has failed $fails runs in a row. Last error: $error");
+		sc_log_error("NASA procurement monitor has failed $fails runs in a row. Last error: $error", array('key' => 'nasa-failures'));
 	}
 }

@@ -20,3 +20,6 @@ fonts/
 # --- Dependencies (run `php composer.phar install`) ---
 vendor/
 composer.phar
+
+# Error log and triage reports (errorlog.inc, cron/error_triage.sh)
+logs/

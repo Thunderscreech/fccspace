@@ -5,3 +5,4 @@
 #*/1 * * * * sleep 30;php /home/chairboy/fccspacewatch/faalaunchlicensewatch.php >> /home/chairboy/fccspacewatch/faalicensewatch.log 2>&1
 20 * * * * php /home/chairboy/fccspacewatch/itumonitor.php > /home/chairboy/fccspacewatch/itumonitor.log  2>&1
 30 * * * * php /home/chairboy/fccspacewatch/nasa_procurement_monitor.php
+35 7 * * * /home/chairboy/fccspacewatch/cron/error_triage.sh > /dev/null 2>&1   # daily Claude triage of logs/errors.md
